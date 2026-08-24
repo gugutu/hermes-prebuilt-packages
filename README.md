@@ -12,9 +12,9 @@ The release contract deliberately separates two lifetimes:
   `runtime-android-arm64` contain target headers, static libraries, platform
   support, metadata, and licenses.
 
-Android packages contain only the arm64 fbjni linker library and Hermes Intl
-classes. Applications obtain the matching fbjni runtime through its Maven
-dependency and choose their final ABI set with Gradle `abiFilters`.
+The Android runtime is a pure native arm64 package. It uses Hermes' lightweight
+Unicode backend and does not require Java classes, fbjni, or an Android AAR.
+ECMA-402 `Intl` is intentionally outside this toolchain contract.
 
 Every GitHub release contains per-package `.tar.gz` archives, `manifest.json`,
 and `checksums.txt`. Tags and release assets are immutable. These narrowly

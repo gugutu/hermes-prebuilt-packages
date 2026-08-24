@@ -30,7 +30,7 @@ common_cmake=(
   -G Ninja
   -DCMAKE_BUILD_TYPE=MinSizeRel
   -DHERMES_ENABLE_NAPI=OFF
-  -DHERMES_ENABLE_INTL=ON
+  -DHERMES_ENABLE_INTL=OFF
   -DHERMES_ENABLE_CORE_EXTENSIONS=ON
   -DHERMES_ENABLE_CONTRIB_EXTENSIONS=ON
   -DHERMES_ENABLE_DEBUGGER=OFF
@@ -58,8 +58,6 @@ copy_runtime_sdk() {
 package_kind=runtime
 rust_target=
 platform_support=
-fbjni_version=
-
 case "$target" in
   compiler-macos-arm64)
     package_kind=compiler
@@ -110,8 +108,7 @@ case "$target" in
     ;;
   runtime-android-arm64)
     rust_target=aarch64-linux-android
-    platform_support=android-fbjni
-    fbjni_version="$FBJNI_VERSION"
+    platform_support=android-unicode-lite
     android_sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
     android_ndk="${ANDROID_NDK:-$android_sdk/ndk/$ANDROID_NDK_VERSION}"
     if [[ ! -f "$android_ndk/build/cmake/android.toolchain.cmake" ]]; then
@@ -119,48 +116,25 @@ case "$target" in
       exit 1
     fi
 
-    ANDROID_SDK_ROOT="$android_sdk" HERMES_WS_DIR="$source_dir" \
-      "$source_dir/android/gradlew" -p "$source_dir/android" \
-      -PndkPath="$android_ndk" \
-      'configureCMakeRelease[arm64-v8a]' \
-      compileReleaseJavaWithJavac \
-      --quiet
-
-    host_compilers="$source_dir/build/ImportHostCompilers.cmake"
-    fbjni_config="$(find "$source_dir/build" "$source_dir/android/.cxx" \
-      -path '*/arm64-v8a/*/fbjniConfig.cmake' -print 2>/dev/null | head -1)"
-    if [[ ! -f "$host_compilers" || -z "$fbjni_config" ]]; then
-      echo "Official Hermes Android bootstrap did not produce host compilers or fbjni Prefab" >&2
-      exit 1
-    fi
-
+    host_build="$build_root/host"
+    cmake -S "$source_dir" -B "$host_build" "${common_cmake[@]}" \
+      -DCMAKE_BUILD_TYPE=Release
+    cmake --build "$host_build" --target hermesc
     target_build="$build_root/target"
     cmake -S "$source_dir" -B "$target_build" "${common_cmake[@]}" \
       -DCMAKE_TOOLCHAIN_FILE="$android_ndk/build/cmake/android.toolchain.cmake" \
       -DANDROID_ABI=arm64-v8a \
       -DANDROID_PLATFORM="android-$ANDROID_API_LEVEL" \
-      -DANDROID_STL=c++_shared \
-      -DHERMES_IS_ANDROID=ON \
-      -DIMPORT_HOST_COMPILERS="$host_compilers" \
+      -DANDROID_STL=c++_static \
+      -DHERMES_IS_ANDROID=OFF \
+      -DHERMES_IS_MOBILE_BUILD=ON \
+      -DHERMES_UNICODE_LITE=ON \
+      -DIMPORT_HOST_COMPILERS="$host_build/ImportHostCompilers.cmake" \
       -DJSI_DIR="$source_dir/API/jsi" \
-      -Dfbjni_DIR="$(dirname "$fbjni_config")" \
       -DHERMES_RELEASE_VERSION=1.0.0 \
       -DHERMESVM_HEAP_HV_MODE=HEAP_HV_PREFER32
     cmake --build "$target_build" --target hermesvm_a jsi
     copy_runtime_sdk "$target_build"
-
-    gradle_home="${GRADLE_USER_HOME:-$HOME/.gradle}"
-    fbjni_aar="$(find "$gradle_home/caches/modules-2/files-2.1/com.facebook.fbjni/fbjni/$FBJNI_VERSION" \
-      -name "fbjni-$FBJNI_VERSION.aar" -type f -print | head -1)"
-    java_classes="$(find "$source_dir/build/intermediates/javac/release" \
-      -type d -name classes -print | head -1)"
-    if [[ -z "$fbjni_aar" || -z "$java_classes" ]]; then
-      echo "Hermes Android platform payload is incomplete" >&2
-      exit 1
-    fi
-    mkdir -p "$package_dir/android"
-    unzip -p "$fbjni_aar" jni/arm64-v8a/libfbjni.so > "$package_dir/lib/libfbjni.so"
-    (cd "$java_classes" && jar --create --file "$package_dir/android/hermes-platform.jar" .)
     ;;
   *)
     echo "unsupported package target: $target" >&2
@@ -178,17 +152,16 @@ source_revision = "$HERMES_REVISION"
 source_branch = "$HERMES_BRANCH"
 bytecode_version = $HERMES_BYTECODE_VERSION
 target = "$rust_target"
-intl = true
+intl = false
 core_extensions = true
 contrib_extensions = true
 napi = false
 platform_support = "$platform_support"
-fbjni_version = "$fbjni_version"
 EOF
 
 python3 - "$package_dir/metadata.json" "$target" "$package_kind" "$rust_target" \
   "$platform_support" "$package_tag" "$HERMES_REVISION" "$HERMES_BRANCH" \
-  "$HERMES_BYTECODE_VERSION" "$fbjni_version" <<'PY'
+  "$HERMES_BYTECODE_VERSION" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -203,7 +176,6 @@ from pathlib import Path
     revision,
     branch,
     bytecode_version,
-    fbjni_version,
 ) = sys.argv[1:]
 metadata = {
     "schema_version": 1,
@@ -216,14 +188,12 @@ metadata = {
     "hermes_branch": branch,
     "bytecode_version": int(bytecode_version),
     "features": {
-        "intl": True,
+        "intl": False,
         "core_extensions": True,
         "contrib_extensions": True,
         "napi": False,
     },
 }
-if fbjni_version:
-    metadata["fbjni_version"] = fbjni_version
 Path(output).write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
 PY
 

@@ -90,8 +90,8 @@ def main() -> int:
         f"Hermes prebuilt toolchain `{tag}`.\n\n"
         f"Hermes revision: `{manifest['hermes_revision']}`  \n"
         f"Bytecode version: `{manifest['bytecode_version']}`\n\n"
-        "The macOS arm64 compiler and all target runtimes are built from the "
-        "same source revision. Archives contain immutable manifests, build "
+        "Both host compilers and all target runtimes are built from the same "
+        "source revision. Archives contain immutable manifests, build "
         "metadata, checksums, and redistributed license files.\n",
         encoding="utf-8",
     )

@@ -25,15 +25,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Java
-        if: matrix.target == 'runtime-android-arm64'
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Install Linux compiler dependencies
-        if: matrix.target == 'compiler-linux-x64'
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
         shell: bash
         run: |
           sudo apt-get update

@@ -1,3 +1,6 @@
+# Copyright (c) 2026 gugutu
+# SPDX-License-Identifier: MIT
+
 diff --git a/API/hermes/CMakeLists.txt b/API/hermes/CMakeLists.txt
 --- a/API/hermes/CMakeLists.txt
 +++ b/API/hermes/CMakeLists.txt

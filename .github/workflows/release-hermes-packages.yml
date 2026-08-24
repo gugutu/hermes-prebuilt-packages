@@ -1,0 +1,159 @@
+name: Release Hermes packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_tag:
+        description: Immutable package tag, for example hermes-static-h-b99-r0
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.package_tag }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: validate release
+    runs-on: ubuntu-24.04
+    outputs:
+      package_tag: ${{ steps.validate.outputs.package_tag }}
+      release_exists: ${{ steps.validate.outputs.release_exists }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate immutable tag
+        id: validate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          source config/hermes.env
+          package_tag="${{ inputs.package_tag }}"
+          expected="^hermes-${HERMES_LABEL}-r[0-9]+$"
+          if [[ "$GITHUB_REF_NAME" != "main" ]]; then
+            echo "Releases must run from main" >&2
+            exit 1
+          fi
+          if [[ ! "$package_tag" =~ $expected ]]; then
+            echo "Tag $package_tag does not match $expected" >&2
+            exit 1
+          fi
+          release_exists=false
+          if gh release view "$package_tag" >/dev/null 2>&1; then
+            release_exists=true
+            temp="$(mktemp -d)"
+            gh release download "$package_tag" --pattern manifest.json --dir "$temp"
+            python3 -c '
+          import json, sys
+          manifest = json.load(open(sys.argv[1], encoding="utf-8"))
+          if manifest.get("hermes_revision") != sys.argv[2]:
+              raise SystemExit("existing release uses a different Hermes revision")
+          if manifest.get("bytecode_version") != int(sys.argv[3]):
+              raise SystemExit("existing release uses a different bytecode version")
+          ' "$temp/manifest.json" "$HERMES_REVISION" "$HERMES_BYTECODE_VERSION"
+          fi
+          echo "package_tag=$package_tag" >> "$GITHUB_OUTPUT"
+          echo "release_exists=$release_exists" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: build ${{ matrix.target }}
+    needs: validate
+    if: needs.validate.outputs.release_exists != 'true'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: compiler-macos-arm64
+            runner: macos-26
+          - target: runtime-macos-arm64
+            runner: macos-26
+          - target: runtime-ios-arm64
+            runner: macos-26
+          - target: runtime-android-arm64
+            runner: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Java
+        if: matrix.target == 'runtime-android-arm64'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configure Android NDK
+        if: matrix.target == 'runtime-android-arm64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          source config/hermes.env
+          android_home="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          sdkmanager="$android_home/cmdline-tools/latest/bin/sdkmanager"
+          if [[ ! -d "$android_home/ndk/$ANDROID_NDK_VERSION" ]]; then
+            (yes || true) | "$sdkmanager" --licenses >/dev/null
+            (yes || true) | "$sdkmanager" --install "ndk;$ANDROID_NDK_VERSION"
+          fi
+          echo "ANDROID_SDK_ROOT=$android_home" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK=$android_home/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_ENV"
+
+      - name: Prepare source
+        shell: bash
+        run: bash scripts/prepare_source.sh
+
+      - name: Build and package
+        shell: bash
+        env:
+          HERMES_PACKAGE_TAG: ${{ needs.validate.outputs.package_tag }}
+        run: bash scripts/build_package.sh "${{ matrix.target }}"
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.target }}
+          path: work/package/${{ matrix.target }}
+          compression-level: 0
+          retention-days: 1
+
+  publish:
+    name: publish release
+    needs:
+      - validate
+      - build
+    if: needs.validate.outputs.release_exists != 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
+        with:
+          path: work/release-artifacts
+
+      - name: Create release assets
+        shell: bash
+        run: |
+          python3 scripts/create_release_assets.py \
+            work/release-artifacts \
+            work/release-assets \
+            "${{ needs.validate.outputs.package_tag }}"
+
+      - name: Publish immutable release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.validate.outputs.package_tag }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG_NAME" \
+            work/release-assets/*.tar.gz \
+            work/release-assets/manifest.json \
+            work/release-assets/checksums.txt \
+            --target "$GITHUB_SHA" \
+            --title "$TAG_NAME" \
+            --prerelease \
+            --notes-file work/release-assets/release-notes.md

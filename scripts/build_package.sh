@@ -6,7 +6,7 @@ set -euo pipefail
 
 target="${1:-}"
 if [[ -z "$target" ]]; then
-  echo "usage: $0 <compiler-macos-arm64|runtime-macos-arm64|runtime-ios-arm64|runtime-android-arm64>" >&2
+  echo "usage: $0 <compiler-macos-arm64|compiler-linux-x64|runtime-macos-arm64|runtime-ios-arm64|runtime-android-arm64>" >&2
   exit 2
 fi
 
@@ -68,6 +68,15 @@ case "$target" in
     cmake -S "$source_dir" -B "$build_root" "${common_cmake[@]}" \
       -DCMAKE_OSX_ARCHITECTURES=arm64 \
       -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOS_DEPLOYMENT_TARGET"
+    cmake --build "$build_root" --target hermesc
+    mkdir -p "$package_dir/bin"
+    cp "$build_root/bin/hermesc" "$package_dir/bin/hermesc"
+    ;;
+  compiler-linux-x64)
+    package_kind=compiler
+    rust_target=x86_64-unknown-linux-gnu
+    platform_support=host-linux
+    cmake -S "$source_dir" -B "$build_root" "${common_cmake[@]}"
     cmake --build "$build_root" --target hermesc
     mkdir -p "$package_dir/bin"
     cp "$build_root/bin/hermesc" "$package_dir/bin/hermesc"
@@ -219,4 +228,3 @@ Path(output).write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
 PY
 
 printf 'Packaged %s at %s\n' "$target" "$package_dir"
-

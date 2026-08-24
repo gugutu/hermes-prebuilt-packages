@@ -12,6 +12,7 @@ from pathlib import Path
 
 
 EXPECTED_TARGETS = {
+    "compiler-linux-x64",
     "compiler-macos-arm64",
     "runtime-macos-arm64",
     "runtime-ios-arm64",
@@ -99,4 +100,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

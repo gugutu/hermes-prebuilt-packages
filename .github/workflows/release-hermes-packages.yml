@@ -70,6 +70,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - target: compiler-linux-x64
+            runner: ubuntu-24.04
           - target: compiler-macos-arm64
             runner: macos-26
           - target: runtime-macos-arm64
@@ -87,6 +89,13 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+
+      - name: Install Linux compiler dependencies
+        if: matrix.target == 'compiler-linux-x64'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libicu-dev ninja-build
 
       - name: Configure Android NDK
         if: matrix.target == 'runtime-android-arm64'

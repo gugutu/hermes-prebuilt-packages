@@ -6,7 +6,7 @@ set -euo pipefail
 
 target="${1:-}"
 if [[ -z "$target" ]]; then
-  echo "usage: $0 <compiler-macos-arm64|compiler-linux-x64|runtime-macos-arm64|runtime-ios-arm64|runtime-android-arm64>" >&2
+  echo "usage: $0 <compiler-macos-arm64|compiler-linux-x64|runtime-macos-arm64|runtime-ios-arm64|runtime-android-arm64|runtime-linux-x64>" >&2
   exit 2
 fi
 
@@ -88,6 +88,13 @@ case "$target" in
     cmake --build "$build_root" --target hermesvm_a jsi
     copy_runtime_sdk "$build_root"
     ;;
+  runtime-linux-x64)
+    rust_target=x86_64-unknown-linux-gnu
+    platform_support=host-linux
+    cmake -S "$source_dir" -B "$build_root" "${common_cmake[@]}"
+    cmake --build "$build_root" --target hermesvm_a jsi
+    copy_runtime_sdk "$build_root"
+    ;;
   runtime-ios-arm64)
     rust_target=aarch64-apple-ios
     platform_support=apple
@@ -127,6 +134,7 @@ case "$target" in
       -DANDROID_PLATFORM="android-$ANDROID_API_LEVEL" \
       -DANDROID_STL=c++_static \
       -DHERMES_IS_ANDROID=OFF \
+      -DHERMES_ENABLE_ANDROID_FBJNI=OFF \
       -DHERMES_IS_MOBILE_BUILD=ON \
       -DHERMES_UNICODE_LITE=ON \
       -DIMPORT_HOST_COMPILERS="$host_build/ImportHostCompilers.cmake" \

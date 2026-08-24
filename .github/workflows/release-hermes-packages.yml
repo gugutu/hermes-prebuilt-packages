@@ -74,12 +74,22 @@ jobs:
             runner: ubuntu-24.04
           - target: compiler-macos-arm64
             runner: macos-26
+          - target: compiler-windows-x64
+            runner: windows-2025
+          - target: compiler-windows-arm64
+            runner: windows-11-arm
+          - target: runtime-linux-x64
+            runner: ubuntu-24.04
           - target: runtime-macos-arm64
             runner: macos-26
           - target: runtime-ios-arm64
             runner: macos-26
           - target: runtime-android-arm64
             runner: ubuntu-24.04
+          - target: runtime-windows-x64
+            runner: windows-2025
+          - target: runtime-windows-arm64
+            runner: windows-11-arm
     steps:
       - uses: actions/checkout@v6
 
@@ -109,11 +119,19 @@ jobs:
         shell: bash
         run: bash scripts/prepare_source.sh
 
-      - name: Build and package
+      - name: Build and package Unix target
+        if: runner.os != 'Windows'
         shell: bash
         env:
           HERMES_PACKAGE_TAG: ${{ needs.validate.outputs.package_tag }}
         run: bash scripts/build_package.sh "${{ matrix.target }}"
+
+      - name: Build and package Windows target
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          HERMES_PACKAGE_TAG: ${{ needs.validate.outputs.package_tag }}
+        run: ./scripts/build_windows_package.ps1 -Target "${{ matrix.target }}"
 
       - name: Upload package
         uses: actions/upload-artifact@v7

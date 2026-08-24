@@ -1,0 +1,47 @@
+diff --git a/API/hermes/CMakeLists.txt b/API/hermes/CMakeLists.txt
+--- a/API/hermes/CMakeLists.txt
++++ b/API/hermes/CMakeLists.txt
+@@ -85,7 +85,10 @@ if(HERMES_THREAD_SAFETY_ANALYSIS)
+   endif()
+ endif()
+ 
+-if(HERMES_IS_ANDROID)
++set(HERMES_ENABLE_ANDROID_FBJNI ${HERMES_IS_ANDROID} CACHE BOOL
++  "Wrap the default finalizer worker in an fbjni ThreadScope")
++
++if(HERMES_ENABLE_ANDROID_FBJNI)
+   # hermes.cpp may wrap the finalizer worker thread in an fbjni ThreadScope.
+   set(API_JNI_DEPS fbjni::fbjni)
+ endif()
+@@ -94,6 +97,10 @@ add_hermes_library(hermesapi
+   ${api_sources}
+   LINK_OBJLIBS hermesPublic LINK_LIBS jsi ${CDP_DEPS} ${API_JNI_DEPS}
+   )
++if(HERMES_ENABLE_ANDROID_FBJNI)
++  target_compile_definitions(hermesapi_obj PRIVATE HERMES_ENABLE_ANDROID_FBJNI=1)
++endif()
++
+ target_include_directories(hermesapi_obj PUBLIC ..)
+ 
+ # Pass core extensions flag to C++ code.
+diff --git a/API/hermes/hermes.cpp b/API/hermes/hermes.cpp
+--- a/API/hermes/hermes.cpp
++++ b/API/hermes/hermes.cpp
+@@ -70,7 +70,7 @@
+ #include <jsi/instrumentation.h>
+ #include <jsi/threadsafe.h>
+ 
+-#ifdef __ANDROID__
++#ifdef HERMES_ENABLE_ANDROID_FBJNI
+ #include <fbjni/fbjni.h>
+ #endif
+ 
+@@ -258,7 +258,7 @@ using ScheduleCallbackFunc = std::function<void(EventLoopCallback)>;
+ /// embedder did not configure one: a JNI ThreadScope wrapper on Android, and
+ /// an empty runner, which leaves the thread unwrapped, everywhere else.
+ vm::ThreadRunner makeDefaultFinalizerThreadRunner() {
+-#ifdef __ANDROID__
++#ifdef HERMES_ENABLE_ANDROID_FBJNI
+   return [](std::function<void()> run) {
+     // Finalizers may release JNI references, which requires the thread to be
+     // attached to the JVM. ThreadScope's constructor throws when fbjni has no

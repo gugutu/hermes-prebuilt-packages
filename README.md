@@ -6,11 +6,12 @@ bytecode version.
 
 The release contract deliberately separates two lifetimes:
 
-- `compiler-macos-arm64` and `compiler-linux-x64` contain the host `hermesc`
-  used during local and CI application builds;
-- `runtime-macos-arm64`, `runtime-ios-arm64`, and
-  `runtime-android-arm64` contain target headers, static libraries, platform
-  support, metadata, and licenses.
+- `compiler-macos-arm64`, `compiler-linux-x64`, `compiler-windows-x64`, and
+  `compiler-windows-arm64` contain the host `hermesc` used during local and CI
+  application builds;
+- runtime packages cover macOS arm64, iOS device arm64, Android arm64, Linux
+  x64, and Windows x64/arm64, and contain target headers, static libraries,
+  platform support, metadata, and licenses.
 
 The Android runtime is a pure native arm64 package. It uses Hermes' lightweight
 Unicode backend and does not require Java classes, fbjni, or an Android AAR.

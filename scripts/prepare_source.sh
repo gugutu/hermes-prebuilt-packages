@@ -16,6 +16,12 @@ git -C "$source_dir" remote add origin "$HERMES_REPOSITORY"
 git -C "$source_dir" fetch --depth=1 origin "$HERMES_REVISION"
 git -C "$source_dir" checkout --quiet --detach FETCH_HEAD
 
+for patch in "$root"/patches/*.patch; do
+  [[ -e "$patch" ]] || continue
+  git -C "$source_dir" apply --check "$patch"
+  git -C "$source_dir" apply "$patch"
+done
+
 actual_revision="$(git -C "$source_dir" rev-parse HEAD)"
 if [[ "$actual_revision" != "$HERMES_REVISION" ]]; then
   echo "Hermes source revision mismatch: $actual_revision" >&2
@@ -30,4 +36,3 @@ if [[ "$bytecode_version" != "$HERMES_BYTECODE_VERSION" ]]; then
 fi
 
 printf 'Prepared Hermes %s (bytecode %s)\n' "$actual_revision" "$bytecode_version"
-
